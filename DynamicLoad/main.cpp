@@ -64,11 +64,11 @@ int main()
 	//	+ 0x01c EntryPoint : 0x00f312a7 Void
 
 	// * below is InMemoryOrderLinks of _LDR_DATA_TABLE_ENTRY
-	// |-LDRDATATABLEENTRY-|        |-LDRDATATABLEENTRY-|		 |-LDRDATATABLEENTRY-|
-	// |      8bits        |        |      8bits        |		 |      8bits        |
+	// |-LDRDATATABLEENTRY-|        |-LDRDATATABLEENTRY-|        |-LDRDATATABLEENTRY-|
+	// |      8bits        |        |      8bits        |        |      8bits        |
 	// |        *          |-Flink->|        *          |-Flink->|        *          |
-	// |-------------------|        |-------------------| 		 |-------------------|
-	// |     exe name      |        |       ntdll       | 		 |      kernel32     |
+	// |-------------------|        |-------------------|        |-------------------|
+	// |     exe name      |        |       ntdll       |        |      kernel32     |
 	// |-------------------|        |-------------------|        |-------------------|
 	// ref: https://www.ired.team/offensive-security/code-injection-process-injection/finding-kernel32-base-and-function-addresses-in-shellcode#finding-kernel32-address-in-assembly
 	for (size_t id = 0; id < 3; id++)
@@ -131,7 +131,7 @@ DWORD GetApi(HMODULE hMod, const char* pszApiName)
 	WORD wIndexOfTargetFunc = *(PWORD)dwAddressOfNameOrdinal;
 
 	DWORD dwAddressOfFuncs = (DWORD)hMod + pImageExportDir->AddressOfFunctions;
-	DWORD dwTargetFuncEntryOffset = dwAddressOfFuncs + wIndexOfTargetFunc * 4;  // ?
+	DWORD dwTargetFuncEntryOffset = dwAddressOfFuncs + wIndexOfTargetFunc * sizeof(DWORD);
 
 	DWORD dwTargetFuncEntry = (DWORD)hMod + *(PDWORD)dwTargetFuncEntryOffset;
 
