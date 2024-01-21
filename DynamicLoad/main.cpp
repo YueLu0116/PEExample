@@ -4,6 +4,9 @@
 #include <stdio.h>
 
 typedef int(WINAPI *PFnMessageBox)(HWND, LPCTSTR, LPCTSTR, UINT);
+typedef FARPROC(WINAPI* PFnGetProcAddress)(HMODULE, LPCSTR);
+typedef HMODULE(WINAPI* PFnLoadLibraryW)(LPCWSTR);
+
 
 PPEB GetPEB()
 {
@@ -35,7 +38,7 @@ PPEB GetPEB()
 //	return true;
 //}
 
-
+DWORD GetApi(HMODULE hMod, const char* pszApiName);
 
 int main()
 {
@@ -60,7 +63,7 @@ int main()
 	//	+ 0x018 DllBase : 0x00f30000 Void
 	//	+ 0x01c EntryPoint : 0x00f312a7 Void
 
-    // * below is InMemoryOrderLinks of _LDR_DATA_TABLE_ENTRY
+	// * below is InMemoryOrderLinks of _LDR_DATA_TABLE_ENTRY
 	// |-LDRDATATABLEENTRY-|        |-LDRDATATABLEENTRY-|		 |-LDRDATATABLEENTRY-|
 	// |      8bits        |        |      8bits        |		 |      8bits        |
 	// |        *          |-Flink->|        *          |-Flink->|        *          |
@@ -78,5 +81,59 @@ int main()
 
 	printf("Base address of kernel32dll is 0x%x\n", dwDllBase);
 
+	PFnGetProcAddress pFnGetProcAddress = (PFnGetProcAddress)GetApi((HMODULE)dwDllBase, "GetProcAddress");
+	if (!pFnGetProcAddress)
+		return -3;
+
+	PFnLoadLibraryW pfnLoadraryW = (PFnLoadLibraryW)pFnGetProcAddress((HMODULE)dwDllBase, "LoadLibraryW");
+	if (!pfnLoadraryW)
+		return -4;
+
+	HMODULE hModUser32 = pfnLoadraryW(L"user32.dll");
+	if (!hModUser32)
+		return -5;
+
+	PFnMessageBox pfnMessageBoxW = (PFnMessageBox)pFnGetProcAddress(hModUser32, "MessageBoxW");
+	if (!pfnMessageBoxW)
+		return -6;
+
+	pfnMessageBoxW(NULL, L"Hello World", L"OK", MB_OK);
+
 	return 0;
-} 
+}
+
+DWORD GetApi(HMODULE hMod, const char* pszApiName)
+{
+	PIMAGE_NT_HEADERS pImageNTHeaders = (PIMAGE_NT_HEADERS)((DWORD)hMod + *(PDWORD)((DWORD)hMod + 0x3c));
+	PIMAGE_EXPORT_DIRECTORY pImageExportDir = (PIMAGE_EXPORT_DIRECTORY)((DWORD)hMod + pImageNTHeaders->OptionalHeader.DataDirectory->VirtualAddress);
+
+	DWORD dwAddressOfNames = (DWORD)hMod + pImageExportDir->AddressOfNames;
+	DWORD dwTmpAddressOfName = dwAddressOfNames;
+
+	DWORD dwOffset = 0;
+	for (size_t id = 0; id < pImageExportDir->NumberOfNames; id++)
+	{
+		DWORD dwNameAddr =  (DWORD)hMod + *(PDWORD)dwTmpAddressOfName;
+		char* pszName = (char*)dwNameAddr;
+		if (strcmp(pszName, pszApiName) == 0)
+		{
+			printf("Find named function %s\n", pszName);
+			dwOffset = dwTmpAddressOfName - dwAddressOfNames;
+			break;
+		}
+
+		dwTmpAddressOfName += sizeof(DWORD);
+	}
+
+	dwOffset = (dwOffset) >> 1;  // DWORD -> WORD
+
+	DWORD dwAddressOfNameOrdinal = (DWORD)hMod + pImageExportDir->AddressOfNameOrdinals + dwOffset;
+	WORD wIndexOfTargetFunc = *(PWORD)dwAddressOfNameOrdinal;
+
+	DWORD dwAddressOfFuncs = (DWORD)hMod + pImageExportDir->AddressOfFunctions;
+	DWORD dwTargetFuncEntryOffset = dwAddressOfFuncs + wIndexOfTargetFunc * 4;  // ?
+
+	DWORD dwTargetFuncEntry = (DWORD)hMod + *(PDWORD)dwTargetFuncEntryOffset;
+
+	return dwTargetFuncEntry;
+}
